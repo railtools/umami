@@ -1,0 +1,42 @@
+# Local dev stack: Umami (built from this repo's Dockerfile) + Postgres.
+# Mirrors the Railway setup: Umami gets DATABASE_URL and APP_SECRET, and
+# listens on whatever PORT is set (deliberately not the image default 3000).
+services:
+  umami:
+    build: .
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    environment:
+      PORT: ${PORT:-8080}
+      DATABASE_URL: postgresql://umami:umami@db:5432/umami
+      # Local-only default. On Railway this is ${{secret(64)}}.
+      APP_SECRET: ${APP_SECRET:-local-dev-secret-not-for-production}
+    depends_on:
+      db:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${PORT}/api/heartbeat"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  db:
+    image: postgres:18.7-alpine
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: umami
+    volumes:
+      # Postgres 18+ images keep data under /var/lib/postgresql/<major>/
+      - umami-db-data:/var/lib/postgresql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  umami-db-data:
